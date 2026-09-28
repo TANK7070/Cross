@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SmartCross - Equipe v1.006 - Inscription des participants</title>
+<title>SmartCross - Equipe v1.009 - Inscription des participants</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -64,6 +64,8 @@ tr.row-f:hover td { background:#fbcfe8; }
   </div>
   <div style="text-align:right;">
     <div id="etab-display" style="font-weight:600;"></div>
+    <div id="google-user" style="font-size:.85em;margin:4px 0;">🔒 Non connecté</div>
+    <button onclick="connexionGoogle()" id="btn-google">🔐 Se connecter avec Google</button>
     <div class="dict-status" id="dict-status"></div>
   </div>
 </header>
@@ -138,10 +140,13 @@ tr.row-f:hover td { background:#fbcfe8; }
       <span id="part-summary" style="font-size:.9em;font-weight:600;"></span>
     </div>
     <div class="card" style="background:#f4f8ff;">
-      <h3 style="margin:0 0 6px;">☁️ Dépôt sur le Drive de la course</h3>
+      <h3 style="margin:0 0 6px;">☁️ Envoi de l'inscription</h3>
+      <p style="font-size:.85em;color:#555;margin:0 0 6px;">Envoie la liste au dossier Drive de la course et garde une sauvegarde dans votre propre Drive (rechargée automatiquement à la connexion).</p>
+      <div class="row" id="drive-folder-row">
+        <input id="drive-folder" type="text" placeholder="Lien ou ID du dossier Drive de la course" style="flex:1;min-width:240px;" onchange="saveDriveFolder()">
+      </div>
       <div class="row">
-        <input id="drive-folder" type="text" placeholder="Lien ou ID du dossier Drive fourni par l'organisateur" style="flex:1;min-width:240px;" onchange="saveDriveFolder()">
-        <button onclick="deposerSurDrive()">Déposer ma liste sur le Drive</button>
+        <button onclick="deposerSurDrive()">📤 Envoyer mon inscription</button>
       </div>
       <div id="drive-status" style="font-size:.85em;margin-top:6px;"></div>
     </div>
@@ -222,7 +227,7 @@ function loadDB() {
   // classes: { id, nom, eleves: [{ codeMassar, nomComplet, dateNaissanceRaw, anneeNaissance, sexe, sexeManuel, selected, elite }] }
 }
 let DB = loadDB();
-function saveDB() { localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }
+function saveDB() { DB.majLe = Date.now(); localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }
 function uid() { return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function showToast(msg) {
   const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
@@ -445,7 +450,10 @@ const GOOGLE_CLIENT_ID = '485145495491-t625ar1m4fgga69edeq0rtvdt7vcgbsn.apps.goo
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 let driveToken = null;
 
+// Dossier "DriveCross" de l'organisateur : coller ici son ID (ou son lien) pour masquer le champ de saisie
+const DRIVE_FOLDER_ID = '1BLphnNEO3SOoYMvtUD__Mrbtv_-NdhkS';
 function getFolderId() {
+  if (DRIVE_FOLDER_ID) return DRIVE_FOLDER_ID.match(/folders\/([\w-]+)/)?.[1] || DRIVE_FOLDER_ID;
   const v = document.getElementById('drive-folder').value.trim();
   const m = v.match(/folders\/([\w-]+)/);
   return m ? m[1] : v;
@@ -461,7 +469,7 @@ function driveAuth() {
     if (!window.google || !google.accounts) return reject(new Error('Service Google indisponible (connexion internet ?)'));
     google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID, scope: DRIVE_SCOPE,
-      callback: r => { if (r.error) return reject(new Error(r.error)); driveToken = r.access_token; setTimeout(() => driveToken = null, 3300 * 1000); resolve(driveToken); }
+      callback: r => { if (r.error) return reject(new Error(r.error)); driveToken = r.access_token; afficherUtilisateur(); setTimeout(() => driveToken = null, 3300 * 1000); resolve(driveToken); }
     }).requestAccessToken();
   });
 }
@@ -471,7 +479,31 @@ async function driveFetch(url, opts) {
   if (!r.ok) throw new Error('Drive ' + r.status + ' : ' + (await r.text()).slice(0, 150));
   return r.json();
 }
+async function afficherUtilisateur() {
+  try {
+    const u = (await driveFetch('https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress)')).user;
+    document.getElementById('google-user').textContent = '✅ ' + u.displayName + ' (' + u.emailAddress + ')';
+    document.getElementById('btn-google').style.display = 'none';
+  } catch (e) { document.getElementById('google-user').textContent = '✅ Connecté à Google'; }
+}
+async function connexionGoogle() {
+  try { await driveAuth(); await restaurationAuto(); } catch (e) { driveStatus('❌ ' + e.message, false); }
+}
+async function driveUpsert(name, parent, content) {
+  const q = encodeURIComponent(`name='${name}' and '${parent}' in parents and trashed=false`);
+  const found = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+  if (found.files && found.files.length) {
+    return driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=media&supportsAllDrives=true`,
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content });
+  }
+  const b = 'sc' + Date.now();
+  const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [parent], mimeType: 'application/json' })}\r\n--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${content}\r\n--${b}--`;
+  return driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
+    { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
+}
+const BACKUP_NAME = 'SmartCross_Equipe_sauvegarde.json';
 async function deposerSurDrive() {
+  if (!restauree) { await connexionGoogle(); showToast('Connecté : vérifiez votre sélection puis cliquez à nouveau sur Envoyer'); return; }
   const folder = getFolderId();
   if (!folder) { showToast('Renseignez le lien du dossier Drive'); return; }
   if (!DB.anneeLimite) { showToast('Définissez d\'abord l\'année limite'); return; }
@@ -481,29 +513,41 @@ async function deposerSurDrive() {
   const exclus = sel.length - valides.length;
   if (exclus > 0 && !confirm(`${exclus} élève(s) hors catégorie d'âge ne seront pas inclus. Continuer ?`)) return;
   const name = 'Equipe_' + (DB.etablissement || 'sans-nom').replace(/[^\p{L}\p{N}_-]+/gu, '_') + '.json';
-  const content = JSON.stringify(buildPayload(valides), null, 2);
   try {
     driveStatus('Connexion à Google…');
     await driveAuth();
-    driveStatus('Envoi en cours…');
-    const q = encodeURIComponent(`name='${name}' and '${folder}' in parents and trashed=false`);
-    const found = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
-    if (found.files && found.files.length) {
-      await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=media&supportsAllDrives=true`,
-        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content });
-    } else {
-      const b = 'sc' + Date.now();
-      const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder], mimeType: 'application/json' })}\r\n--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${content}\r\n--${b}--`;
-      await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
-        { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
-    }
-    driveStatus(`✅ ${valides.length} participant(s) déposé(s) le ${new Date().toLocaleString('fr-FR')} (${name})`, true);
+    driveStatus('Envoi au dossier de la course…');
+    await driveUpsert(name, folder, JSON.stringify(buildPayload(valides), null, 2));
+    driveStatus('Sauvegarde dans votre Drive…');
+    try {
+      await driveUpsert(BACKUP_NAME, 'root', JSON.stringify(DB));
+      driveStatus(`✅ ${valides.length} participant(s) envoyé(s) le ${new Date().toLocaleString('fr-FR')} + sauvegarde dans votre Drive`, true);
+    } catch (e) { driveStatus(`⚠️ Liste envoyée (${name}) mais sauvegarde personnelle échouée : ${e.message}`, false); }
   } catch (e) { driveStatus('❌ ' + e.message, false); }
+}
+let restauree = false;
+// Restauration automatique à la connexion : si l'appareil est vide ou si la sauvegarde Drive est plus récente
+async function restaurationAuto() {
+  try {
+    const q = encodeURIComponent(`name='${BACKUP_NAME}' and 'root' in parents and trashed=false`);
+    const f = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+    if (f.files && f.files.length) {
+      const data = await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.files[0].id}?alt=media`);
+      if (data && Array.isArray(data.classes) && (!DB.classes.length || (data.majLe || 0) > (DB.majLe || 0))) {
+        DB = data; localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+        if (DB.anneeLimite) document.getElementById('input-annee-limite').value = DB.anneeLimite;
+        renderAll();
+        driveStatus('✅ Votre inscription a été restaurée depuis votre Drive : vous pouvez la modifier puis la renvoyer.', true);
+      }
+    }
+    restauree = true;
+  } catch (e) { driveStatus('⚠️ Restauration impossible : ' + e.message, false); }
 }
 
 /* ===================== INITIALISATION ===================== */
 if (DB.anneeLimite) document.getElementById('input-annee-limite').value = DB.anneeLimite;
 document.getElementById('drive-folder').value = localStorage.getItem('smartcross_drive_folder') || '';
+if (DRIVE_FOLDER_ID) document.getElementById('drive-folder-row').style.display = 'none';
 renderAll();
 loadGenderDict();
 </script>
