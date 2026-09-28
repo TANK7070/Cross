@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmartCross - Equipe v1.006 - Inscription des participants</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+* { box-sizing: border-box; }
+body { margin:0; font-family:'Segoe UI', Arial, sans-serif; background:#f2f4f7; color:#1f2937; }
+h1,h2,h3 { margin:0 0 .5em 0; }
+button { cursor:pointer; border:none; border-radius:6px; padding:8px 14px; font-size:.95em; background:#059669; color:#fff; transition:background .15s; }
+button:hover { background:#047857; }
+button.secondary { background:#6b7280; } button.secondary:hover { background:#4b5563; }
+button.danger { background:#dc2626; } button.danger:hover { background:#b91c1c; }
+button.small { padding:3px 9px; font-size:.82em; }
+button:disabled { background:#9ca3af; cursor:not-allowed; }
+input, select { padding:7px 9px; border:1px solid #d1d5db; border-radius:6px; font-size:.95em; }
+table { border-collapse:collapse; width:100%; background:#fff; }
+th, td { border:1px solid #e5e7eb; padding:7px 9px; text-align:left; font-size:.88em; }
+th { background:#f3f4f6; position:sticky; top:0; z-index:1; }
+.card { background:#fff; border-radius:10px; padding:18px 20px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+.badge { display:inline-block; padding:2px 8px; border-radius:12px; font-size:.78em; font-weight:600; }
+.badge.ok { background:#dcfce7; color:#166534; }
+.badge.excl { background:#fee2e2; color:#991b1b; }
+.badge.pending { background:#e5e7eb; color:#374151; }
+header { background:#065f46; color:#fff; padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+header h1 { font-size:1.3em; }
+header .tagline { font-size:.8em; color:#a7f3d0; }
+nav { display:flex; gap:6px; background:#064e3b; padding:8px 24px 0; flex-wrap:wrap; }
+nav button.tab { background:transparent; color:#a7f3d0; border-radius:8px 8px 0 0; padding:8px 16px; }
+nav button.tab.active { background:#f2f4f7; color:#065f46; font-weight:600; }
+main { padding:20px 24px; max-width:1100px; margin:0 auto; }
+.section { display:none; } .section.active { display:block; }
+#table-wrap, #part-wrap { max-height:520px; overflow:auto; border:1px solid #e5e7eb; border-radius:8px; }
+.dropzone { border:2px dashed #9ca3af; border-radius:10px; padding:26px; text-align:center; color:#666; cursor:pointer; }
+.dropzone:hover { border-color:#059669; color:#059669; }
+#toast { position:fixed; bottom:20px; right:20px; background:#111827; color:#fff; padding:10px 16px; border-radius:8px; font-size:.9em; opacity:0; pointer-events:none; transition:opacity .25s; z-index:999; }
+#toast.show { opacity:1; }
+.pill-sexe { padding:2px 6px; border-radius:6px; font-size:.85em; border:1px solid #d1d5db; background:#fff; }
+.warn-banner { background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:10px 14px; border-radius:8px; font-size:.85em; margin-bottom:14px; }
+/* couleur des lignes selon le sexe */
+tr.row-g td { background:#dbeafe; }
+tr.row-f td { background:#fce7f3; }
+tr.row-g:hover td { background:#bfdbfe; }
+tr.row-f:hover td { background:#fbcfe8; }
+.chip { display:inline-flex; align-items:center; gap:6px; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; border-radius:16px; padding:4px 6px 4px 12px; font-size:.85em; margin:3px; cursor:pointer; }
+.chip.active { background:#059669; color:#fff; border-color:#059669; }
+.chip .x { background:transparent; color:inherit; padding:0 6px; font-weight:bold; border-radius:50%; }
+.chip .x:hover { background:rgba(0,0,0,.15); }
+.dict-status { font-size:.78em; color:#a7f3d0; }
+.legend span { display:inline-block; padding:2px 10px; border-radius:6px; font-size:.8em; margin-right:6px; }
+@media (max-width:640px) { main { padding:14px; } header { padding:12px 14px; } nav { padding:6px 14px 0; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🎽 CrossCourse Équipe</h1>
+    <div class="tagline">Import Massar · Sélection des participants</div>
+  </div>
+  <div style="text-align:right;">
+    <div id="etab-display" style="font-weight:600;"></div>
+    <div class="dict-status" id="dict-status"></div>
+  </div>
+</header>
+
+<nav>
+  <button class="tab active" data-tab="selection">📋 Sélection</button>
+  <button class="tab" data-tab="participants">✅ Participants (<span id="tab-count">0</span>)</button>
+</nav>
+
+<main>
+
+<!-- ============ ONGLET SELECTION ============ -->
+<section id="sec-selection" class="section active">
+
+  <div class="card">
+    <h2>Connexion</h2>
+    <p style="font-size:.85em;color:#666;">
+      Un compte Google = un profil (prof accompagnateur). La connexion Google et le dépôt automatique sur le Drive
+      partagé de l'organisateur seront activés une fois le projet Google Cloud dédié configuré.
+    </p>
+    <button disabled>🔒 Se connecter avec Google (à venir)</button>
+  </div>
+
+  <div class="card">
+    <h2>1. Réglages de la course</h2>
+    <p style="font-size:.85em;color:#666;">
+      Provisoire : en attendant la lecture automatique depuis le Drive partagé de l'organisateur, saisissez l'année limite.
+    </p>
+    <div class="row">
+      <div><label style="font-size:.8em;font-weight:600;color:#555;display:block;">Année limite (né avant = exclu)</label>
+        <input id="input-annee-limite" type="number" placeholder="Ex: 2008" style="width:120px;">
+      </div>
+      <button onclick="saveAnneeLimite()">Enregistrer</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. Import des listes Massar</h2>
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+      📄 Cliquez ici (ou glissez-déposez) un ou plusieurs fichiers Excel Massar (.xlsx) — une classe par fichier
+    </div>
+    <input type="file" id="file-input" accept=".xlsx" multiple style="display:none;">
+  </div>
+
+  <div class="card" id="sec-eleves" style="display:none;">
+    <h2>3. Sélection des participants</h2>
+    <div id="classes-chips" style="margin-bottom:10px;"></div>
+    <div class="row">
+      <button onclick="cocherClasse()" class="secondary">Tout cocher (cette classe)</button>
+      <button onclick="decocherClasse()" class="secondary">Tout décocher (cette classe)</button>
+      <span id="selection-count" style="font-size:.85em;color:#555;"></span>
+    </div>
+    <div class="legend" style="margin-bottom:8px;">
+      <span style="background:#dbeafe;">Garçon</span><span style="background:#fce7f3;">Fille</span><span style="background:#f3f4f6;">Sexe non détecté</span>
+    </div>
+    <div id="excl-warning"></div>
+    <div id="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Code Massar</th><th>Nom complet</th><th>Sexe</th><th>Naissance</th><th>Catégorie</th></tr></thead>
+        <tbody id="eleves-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ONGLET PARTICIPANTS ============ -->
+<section id="sec-participants" class="section">
+  <div class="card">
+    <h2>Vérification des participants</h2>
+    <p style="font-size:.85em;color:#666;">Total des participants sélectionnés. Retirez ceux ajoutés par erreur.</p>
+    <div class="row">
+      <span id="part-summary" style="font-size:.9em;font-weight:600;"></span>
+    </div>
+    <div class="card" style="background:#f4f8ff;">
+      <h3 style="margin:0 0 6px;">☁️ Dépôt sur le Drive de la course</h3>
+      <div class="row">
+        <input id="drive-folder" type="text" placeholder="Lien ou ID du dossier Drive fourni par l'organisateur" style="flex:1;min-width:240px;" onchange="saveDriveFolder()">
+        <button onclick="deposerSurDrive()">Déposer ma liste sur le Drive</button>
+      </div>
+      <div id="drive-status" style="font-size:.85em;margin-top:6px;"></div>
+    </div>
+    <div id="part-warning"></div>
+    <div id="part-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Classe</th><th>Code Massar</th><th>Nom complet</th><th>Sexe</th><th>Catégorie</th><th title="Sous-catégorie Élite (par défaut : Sport pour tous)">⭐ Élite</th><th></th></tr></thead>
+        <tbody id="part-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Générer la liste des participants</h2>
+    <p style="font-size:.85em;color:#666;">
+      Provisoire : téléchargement du fichier JSON (le dépôt automatique sur le Drive partagé remplacera ce téléchargement).
+    </p>
+    <button onclick="genererListeParticipants()">⬇️ Générer la liste (JSON)</button>
+  </div>
+</section>
+
+</main>
+<div id="toast"></div>
+
+<script>
+/* ===================== DICTIONNAIRE PRENOMS -> SEXE (distant) ===================== */
+const GENDER_DICT_URL = 'https://gist.githubusercontent.com/TANK7070/4c7889720ab7942164a4527d864eb8ef/raw/';
+const GENDER_CACHE_KEY = 'crossCourseGenderDictCache';
+let GENDER_DICT = {};
+
+async function loadGenderDict() {
+  const status = document.getElementById('dict-status');
+  status.textContent = 'Dictionnaire des prénoms : chargement…';
+  try {
+    const resp = await fetch(GENDER_DICT_URL, { cache: 'no-cache' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    GENDER_DICT = data;
+    try { localStorage.setItem(GENDER_CACHE_KEY, JSON.stringify(data)); } catch (e) {}
+    status.textContent = `Dictionnaire des prénoms : en ligne (${Object.keys(data).length})`;
+  } catch (err) {
+    console.warn('Dictionnaire distant indisponible', err);
+    try {
+      const cached = JSON.parse(localStorage.getItem(GENDER_CACHE_KEY) || 'null');
+      if (cached) {
+        GENDER_DICT = cached;
+        status.textContent = `Dictionnaire des prénoms : copie locale (${Object.keys(cached).length}) — hors ligne`;
+      } else {
+        status.textContent = 'Dictionnaire des prénoms : indisponible (sexe à saisir manuellement)';
+      }
+    } catch (e) {
+      status.textContent = 'Dictionnaire des prénoms : indisponible';
+    }
+  }
+  // (re)détecter le sexe des élèves dont le sexe n'a pas été fixé manuellement
+  let changed = false;
+  DB.classes.forEach(c => c.eleves.forEach(e => {
+    if (!e.sexeManuel) {
+      const s = detecterSexe(e.nomComplet);
+      if (s !== e.sexe) { e.sexe = s; changed = true; }
+    }
+  }));
+  if (changed) { saveDB(); renderAll(); }
+}
+
+// Format Massar : "Nom de famille Prénom(s)" en un seul champ.
+function detecterSexe(nomComplet) {
+  const mots = nomComplet.trim().split(/\s+/);
+  for (let i = 1; i < mots.length; i++) if (GENDER_DICT[mots[i]]) return GENDER_DICT[mots[i]];
+  if (GENDER_DICT[mots[0]]) return GENDER_DICT[mots[0]];
+  return null;
+}
+
+/* ===================== MODELE DE DONNEES ===================== */
+const STORAGE_KEY = 'crossCourseEquipeDB_v2';
+function loadDB() {
+  try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw); } catch (e) { console.error(e); }
+  return { anneeLimite: null, etablissement: '', classeActive: null, classes: [] };
+  // classes: { id, nom, eleves: [{ codeMassar, nomComplet, dateNaissanceRaw, anneeNaissance, sexe, sexeManuel, selected, elite }] }
+}
+let DB = loadDB();
+function saveDB() { localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }
+function uid() { return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2400);
+}
+function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function allEleves() { return DB.classes.flatMap(c => c.eleves.map(e => ({ ...e, classeId: c.id, classeNom: c.nom }))); }
+function findEleve(code) { for (const c of DB.classes) { const e = c.eleves.find(x => x.codeMassar === code); if (e) return e; } return null; }
+function rowClass(sexe) { return sexe === 'G' ? 'row-g' : (sexe === 'F' ? 'row-f' : ''); }
+
+/* ===================== ONGLETS ===================== */
+document.querySelectorAll('nav .tab').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('nav .tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('main .section').forEach(s => s.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('sec-' + btn.dataset.tab).classList.add('active');
+  renderAll();
+}));
+
+/* ===================== CATEGORIES D'AGE ===================== */
+function computeCategories(L) {
+  return [
+    { id:'categ1', nom:`Catég. 1 (${L}-${L+1})`, anneeMin:L, anneeMax:L+1 },
+    { id:'categ2', nom:`Catég. 2 (${L+2}-${L+3})`, anneeMin:L+2, anneeMax:L+3 },
+    { id:'categ3', nom:`Catég. 3 (${L+4}-${L+5})`, anneeMin:L+4, anneeMax:L+5 },
+    { id:'categ4', nom:`Catég. 4 (${L+6} et +)`, anneeMin:L+6, anneeMax:null }
+  ];
+}
+function getCategorieForAnnee(annee) {
+  if (!DB.anneeLimite || !annee) return null;
+  if (annee < DB.anneeLimite) return null;
+  return computeCategories(DB.anneeLimite).find(c => annee >= c.anneeMin && (c.anneeMax === null || annee <= c.anneeMax)) || null;
+}
+function saveAnneeLimite() {
+  const v = parseInt(document.getElementById('input-annee-limite').value, 10);
+  if (!v || v < 1900) { showToast('Année limite invalide'); return; }
+  DB.anneeLimite = v; saveDB(); renderAll(); showToast('Année limite enregistrée');
+}
+
+/* ===================== IMPORT DES FICHIERS MASSAR (multiple) ===================== */
+document.getElementById('file-input').addEventListener('change', e => { importFiles(e.target.files); e.target.value = ''; });
+const dz = document.getElementById('dropzone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor = '#059669'; });
+dz.addEventListener('dragleave', () => { dz.style.borderColor = '#9ca3af'; });
+dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor = '#9ca3af'; importFiles(e.dataTransfer.files); });
+
+function parseDate(raw) {
+  if (typeof raw === 'string' && /^\d{1,2}-\d{1,2}-\d{4}$/.test(raw.trim())) return { raw: raw.trim(), annee: Number(raw.trim().split('-')[2]) };
+  if (typeof raw === 'number') {
+    const d = XLSX.SSF.parse_date_code(raw);
+    if (d) return { raw: `${String(d.d).padStart(2,'0')}-${String(d.m).padStart(2,'0')}-${d.y}`, annee: d.y };
+  }
+  return { raw: raw ? String(raw) : '', annee: null };
+}
+
+function readFileAsArrayBuffer(file) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(file); });
+}
+
+async function importFiles(fileList) {
+  const files = Array.from(fileList).filter(f => /\.xlsx$/i.test(f.name));
+  if (!files.length) { showToast('Aucun fichier .xlsx détecté'); return; }
+  let ok = 0;
+  for (const file of files) {
+    try {
+      const wb = XLSX.read(await readFileAsArrayBuffer(file), { type: 'array' });
+      const ws = wb.Sheets['NotesCC'] || wb.Sheets[wb.SheetNames[0]];
+      const etab = ws['O7'] ? String(ws['O7'].v || '').trim() : '';
+      const nomClasse = ws['I9'] ? String(ws['I9'].v || '').trim() : file.name.replace(/\.xlsx$/i, '');
+      if (etab && !DB.etablissement) DB.etablissement = etab;
+
+      const ancienne = DB.classes.find(c => c.nom === nomClasse);
+      const anciens = {};
+      if (ancienne) ancienne.eleves.forEach(e => anciens[e.codeMassar] = e);
+
+      const eleves = [];
+      for (let row = 18; ; row++) {
+        const cNom = ws['D' + row];
+        if (!cNom || !String(cNom.v || '').trim()) break;
+        const codeMassar = ws['C' + row] ? String(ws['C' + row].v).trim() : '';
+        const nomComplet = String(cNom.v).trim();
+        const { raw, annee } = parseDate(ws['F' + row] ? ws['F' + row].v : '');
+        const prev = anciens[codeMassar];
+        eleves.push({
+          codeMassar, nomComplet, dateNaissanceRaw: raw, anneeNaissance: annee,
+          sexe: prev && prev.sexeManuel ? prev.sexe : detecterSexe(nomComplet),
+          sexeManuel: prev ? !!prev.sexeManuel : false,
+          selected: prev ? !!prev.selected : false,
+          elite: prev ? !!prev.elite : false
+        });
+      }
+      if (!eleves.length) { showToast(`${file.name} : aucun élève à partir de la ligne 18`); continue; }
+
+      if (ancienne) { ancienne.eleves = eleves; DB.classeActive = ancienne.id; }
+      else { const c = { id: uid(), nom: nomClasse, eleves }; DB.classes.push(c); DB.classeActive = c.id; }
+      ok++;
+    } catch (err) { console.error(err); showToast(`${file.name} : erreur de lecture (${err.message})`); }
+  }
+  saveDB(); renderAll();
+  if (ok) showToast(`${ok} classe(s) importée(s)`);
+}
+
+function supprimerClasse(id, ev) {
+  ev.stopPropagation();
+  const c = DB.classes.find(x => x.id === id);
+  if (!c || !confirm(`Supprimer la classe ${c.nom} et ses sélections ?`)) return;
+  DB.classes = DB.classes.filter(x => x.id !== id);
+  if (DB.classeActive === id) DB.classeActive = DB.classes.length ? DB.classes[0].id : null;
+  saveDB(); renderAll();
+}
+function activerClasse(id) { DB.classeActive = id; saveDB(); renderAll(); }
+function classeActive() { return DB.classes.find(c => c.id === DB.classeActive) || DB.classes[0] || null; }
+
+/* ===================== SELECTION ===================== */
+function toggleSelected(code, checked) { const e = findEleve(code); if (e) e.selected = checked; saveDB(); renderAll(); }
+function updateSexe(code, sexe) { const e = findEleve(code); if (e) { e.sexe = sexe || null; e.sexeManuel = true; } saveDB(); renderAll(); }
+function cocherClasse() { const c = classeActive(); if (c) c.eleves.forEach(e => e.selected = true); saveDB(); renderAll(); }
+function decocherClasse() { const c = classeActive(); if (c) c.eleves.forEach(e => e.selected = false); saveDB(); renderAll(); }
+function retirerParticipant(code) { const e = findEleve(code); if (e) { e.selected = false; e.elite = false; } saveDB(); renderAll(); }
+function toggleElite(code, checked) { const e = findEleve(code); if (e) e.elite = checked; saveDB(); renderAll(); }
+
+/* ===================== RENDU ===================== */
+function badgeCat(e) {
+  if (!DB.anneeLimite) return '<span class="badge pending">à définir</span>';
+  const cat = getCategorieForAnnee(e.anneeNaissance);
+  return cat ? `<span class="badge ok">${escapeHtml(cat.nom)}</span>` : '<span class="badge excl">Exclu</span>';
+}
+
+function renderAll() {
+  document.getElementById('etab-display').textContent = DB.etablissement || '';
+  const has = DB.classes.length > 0;
+  document.getElementById('sec-eleves').style.display = has ? 'block' : 'none';
+
+  // chips des classes
+  document.getElementById('classes-chips').innerHTML = DB.classes.map(c => {
+    const n = c.eleves.filter(e => e.selected).length;
+    return `<span class="chip ${classeActive() && classeActive().id === c.id ? 'active' : ''}" onclick="activerClasse('${c.id}')">
+      ${escapeHtml(c.nom)} (${n}/${c.eleves.length})
+      <button class="x" onclick="supprimerClasse('${c.id}', event)" title="Supprimer cette classe">✕</button></span>`;
+  }).join('');
+
+  // tableau de la classe active
+  const ca = classeActive();
+  document.getElementById('eleves-tbody').innerHTML = ca ? ca.eleves.map(e => `
+    <tr class="${rowClass(e.sexe)}">
+      <td><input type="checkbox" ${e.selected ? 'checked' : ''} onchange="toggleSelected('${e.codeMassar}', this.checked)"></td>
+      <td>${escapeHtml(e.codeMassar)}</td>
+      <td>${escapeHtml(e.nomComplet)}</td>
+      <td><select class="pill-sexe" onchange="updateSexe('${e.codeMassar}', this.value)">
+        <option value="G" ${e.sexe==='G'?'selected':''}>G</option>
+        <option value="F" ${e.sexe==='F'?'selected':''}>F</option>
+        <option value="" ${!e.sexe?'selected':''}>?</option></select></td>
+      <td>${escapeHtml(e.dateNaissanceRaw)} ${e.anneeNaissance ? '(' + e.anneeNaissance + ')' : ''}</td>
+      <td>${badgeCat(e)}</td>
+    </tr>`).join('') : '';
+
+  const tous = allEleves();
+  const sel = tous.filter(e => e.selected);
+  document.getElementById('selection-count').textContent = `${sel.length} sélectionné(s) au total`;
+  document.getElementById('tab-count').textContent = sel.length;
+
+  const warnEl = document.getElementById('excl-warning');
+  const exclus = sel.filter(e => !getCategorieForAnnee(e.anneeNaissance));
+  if (!DB.anneeLimite) warnEl.innerHTML = '<div class="warn-banner">⚠️ Année limite non définie (étape 1) : le contrôle d\'âge ne peut pas encore s\'appliquer.</div>';
+  else if (exclus.length) warnEl.innerHTML = `<div class="warn-banner">⚠️ ${exclus.length} élève(s) sélectionné(s) né(s) avant ${DB.anneeLimite} : exclus de la génération.</div>`;
+  else warnEl.innerHTML = '';
+
+  renderParticipants(sel, exclus);
+}
+
+function renderParticipants(sel, exclus) {
+  const g = sel.filter(e => e.sexe === 'G').length, f = sel.filter(e => e.sexe === 'F').length;
+  document.getElementById('part-summary').textContent = `${sel.length} participant(s) — ${g} ♂️, ${f} ♀️` + ` — ⭐ ${sel.filter(e => e.elite).length} Élite` + (sel.length - g - f ? `, ${sel.length - g - f} sexe non défini` : '');
+  document.getElementById('part-warning').innerHTML = (DB.anneeLimite && exclus.length)
+    ? `<div class="warn-banner">⚠️ ${exclus.length} élève(s) hors catégorie d'âge (marqués « Exclu ») : retirez-les ou ils seront ignorés à la génération.</div>` : '';
+  document.getElementById('part-tbody').innerHTML = sel.map((e, i) => `
+    <tr class="${rowClass(e.sexe)}">
+      <td>${i + 1}</td><td>${escapeHtml(e.classeNom)}</td><td>${escapeHtml(e.codeMassar)}</td>
+      <td>${escapeHtml(e.nomComplet)}</td><td>${e.sexe || '?'}</td><td>${badgeCat(e)}</td>
+      <td style="text-align:center;"><input type="checkbox" ${e.elite ? 'checked' : ''} onchange="toggleElite('${e.codeMassar}', this.checked)"></td>
+      <td><button class="danger small" onclick="retirerParticipant('${e.codeMassar}')">Retirer</button></td>
+    </tr>`).join('');
+}
+
+/* ===================== GENERATION ===================== */
+function genererListeParticipants() {
+  if (!DB.anneeLimite) { showToast('Définissez d\'abord l\'année limite'); return; }
+  const sel = allEleves().filter(e => e.selected);
+  if (!sel.length) { showToast('Aucun participant sélectionné'); return; }
+  const valides = sel.filter(e => getCategorieForAnnee(e.anneeNaissance));
+  const exclus = sel.length - valides.length;
+  if (exclus > 0 && !confirm(`${exclus} élève(s) hors catégorie d'âge ne seront pas inclus. Continuer ?`)) return;
+
+  const payload = buildPayload(valides);
+  if (!payload) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+  a.download = (DB.etablissement || 'Equipe') + '_Participants.json';
+  a.click();
+  showToast(`Liste générée : ${payload.participants.length} participant(s)`);
+}
+
+function buildPayload(valides) {
+  return {
+    etablissement: DB.etablissement,
+    anneeLimite: DB.anneeLimite,
+    dateGeneration: new Date().toISOString(),
+    participants: valides.map(e => {
+      const cat = getCategorieForAnnee(e.anneeNaissance);
+      return { codeMassar: e.codeMassar, nomComplet: e.nomComplet, sexe: e.sexe || '', classe: e.classeNom,
+               anneeNaissance: e.anneeNaissance, categorieId: cat.id, categorieNom: cat.nom,
+               elite: !!e.elite, sousCategorie: e.elite ? 'Elite' : 'Sport pour tous' };
+    })
+  };
+}
+
+/* ===================== DRIVE CENTRALISÉ ===================== */
+// À renseigner : ID client OAuth (type "Application Web") du projet Google Cloud dédié
+const GOOGLE_CLIENT_ID = '485145495491-t625ar1m4fgga69edeq0rtvdt7vcgbsn.apps.googleusercontent.com';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+let driveToken = null;
+
+function getFolderId() {
+  const v = document.getElementById('drive-folder').value.trim();
+  const m = v.match(/folders\/([\w-]+)/);
+  return m ? m[1] : v;
+}
+function saveDriveFolder() { localStorage.setItem('smartcross_drive_folder', getFolderId()); }
+function driveStatus(msg, ok) {
+  const el = document.getElementById('drive-status');
+  el.textContent = msg; el.style.color = ok === false ? '#c0392b' : ok ? '#1e8449' : '#555';
+}
+function driveAuth() {
+  return new Promise((resolve, reject) => {
+    if (driveToken) return resolve(driveToken);
+    if (!window.google || !google.accounts) return reject(new Error('Service Google indisponible (connexion internet ?)'));
+    google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID, scope: DRIVE_SCOPE,
+      callback: r => { if (r.error) return reject(new Error(r.error)); driveToken = r.access_token; setTimeout(() => driveToken = null, 3300 * 1000); resolve(driveToken); }
+    }).requestAccessToken();
+  });
+}
+async function driveFetch(url, opts) {
+  const r = await fetch(url, { ...opts, headers: { ...(opts && opts.headers), Authorization: 'Bearer ' + driveToken } });
+  if (r.status === 401) driveToken = null;
+  if (!r.ok) throw new Error('Drive ' + r.status + ' : ' + (await r.text()).slice(0, 150));
+  return r.json();
+}
+async function deposerSurDrive() {
+  const folder = getFolderId();
+  if (!folder) { showToast('Renseignez le lien du dossier Drive'); return; }
+  if (!DB.anneeLimite) { showToast('Définissez d\'abord l\'année limite'); return; }
+  const sel = allEleves().filter(e => e.selected);
+  if (!sel.length) { showToast('Aucun participant sélectionné'); return; }
+  const valides = sel.filter(e => getCategorieForAnnee(e.anneeNaissance));
+  const exclus = sel.length - valides.length;
+  if (exclus > 0 && !confirm(`${exclus} élève(s) hors catégorie d'âge ne seront pas inclus. Continuer ?`)) return;
+  const name = 'Equipe_' + (DB.etablissement || 'sans-nom').replace(/[^\p{L}\p{N}_-]+/gu, '_') + '.json';
+  const content = JSON.stringify(buildPayload(valides), null, 2);
+  try {
+    driveStatus('Connexion à Google…');
+    await driveAuth();
+    driveStatus('Envoi en cours…');
+    const q = encodeURIComponent(`name='${name}' and '${folder}' in parents and trashed=false`);
+    const found = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+    if (found.files && found.files.length) {
+      await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=media&supportsAllDrives=true`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content });
+    } else {
+      const b = 'sc' + Date.now();
+      const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [folder], mimeType: 'application/json' })}\r\n--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${content}\r\n--${b}--`;
+      await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
+        { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
+    }
+    driveStatus(`✅ ${valides.length} participant(s) déposé(s) le ${new Date().toLocaleString('fr-FR')} (${name})`, true);
+  } catch (e) { driveStatus('❌ ' + e.message, false); }
+}
+
+/* ===================== INITIALISATION ===================== */
+if (DB.anneeLimite) document.getElementById('input-annee-limite').value = DB.anneeLimite;
+document.getElementById('drive-folder').value = localStorage.getItem('smartcross_drive_folder') || '';
+renderAll();
+loadGenderDict();
+</script>
+</body>
+</html>
