@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SmartCross - Equipe v1.009 - Inscription des participants</title>
+<title>SmartCross - Equipe v1.010 - Inscription des participants</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -469,13 +469,20 @@ function driveAuth() {
     if (!window.google || !google.accounts) return reject(new Error('Service Google indisponible (connexion internet ?)'));
     google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID, scope: DRIVE_SCOPE,
-      callback: r => { if (r.error) return reject(new Error(r.error)); driveToken = r.access_token; afficherUtilisateur(); setTimeout(() => driveToken = null, 3300 * 1000); resolve(driveToken); }
+      callback: r => {
+        if (r.error) return reject(new Error(r.error));
+        driveToken = r.access_token;
+        sessionStorage.setItem('sc_drive_token', JSON.stringify({ t: driveToken, exp: Date.now() + 3300 * 1000 }));
+        afficherUtilisateur();
+        setTimeout(() => driveToken = null, 3300 * 1000);
+        resolve(driveToken);
+      }
     }).requestAccessToken();
   });
 }
 async function driveFetch(url, opts) {
   const r = await fetch(url, { ...opts, headers: { ...(opts && opts.headers), Authorization: 'Bearer ' + driveToken } });
-  if (r.status === 401) driveToken = null;
+  if (r.status === 401) { driveToken = null; sessionStorage.removeItem('sc_drive_token'); }
   if (!r.ok) throw new Error('Drive ' + r.status + ' : ' + (await r.text()).slice(0, 150));
   return r.json();
 }
@@ -503,7 +510,6 @@ async function driveUpsert(name, parent, content) {
 }
 const BACKUP_NAME = 'SmartCross_Equipe_sauvegarde.json';
 async function deposerSurDrive() {
-  if (!restauree) { await connexionGoogle(); showToast('Connecté : vérifiez votre sélection puis cliquez à nouveau sur Envoyer'); return; }
   const folder = getFolderId();
   if (!folder) { showToast('Renseignez le lien du dossier Drive'); return; }
   if (!DB.anneeLimite) { showToast('Définissez d\'abord l\'année limite'); return; }
@@ -516,6 +522,7 @@ async function deposerSurDrive() {
   try {
     driveStatus('Connexion à Google…');
     await driveAuth();
+    if (!restauree) await restaurationAuto(); // au cas où l'envoi précède le premier passage par "Se connecter"
     driveStatus('Envoi au dossier de la course…');
     await driveUpsert(name, folder, JSON.stringify(buildPayload(valides), null, 2));
     driveStatus('Sauvegarde dans votre Drive…');
@@ -540,11 +547,20 @@ async function restaurationAuto() {
         driveStatus('✅ Votre inscription a été restaurée depuis votre Drive : vous pouvez la modifier puis la renvoyer.', true);
       }
     }
-    restauree = true;
   } catch (e) { driveStatus('⚠️ Restauration impossible : ' + e.message, false); }
+  restauree = true;
 }
 
 /* ===================== INITIALISATION ===================== */
+(function reprendreSession() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('sc_drive_token') || 'null');
+    if (saved && saved.exp > Date.now()) {
+      driveToken = saved.t;
+      afficherUtilisateur().then(restaurationAuto);
+    }
+  } catch (e) {}
+})();
 if (DB.anneeLimite) document.getElementById('input-annee-limite').value = DB.anneeLimite;
 document.getElementById('drive-folder').value = localStorage.getItem('smartcross_drive_folder') || '';
 if (DRIVE_FOLDER_ID) document.getElementById('drive-folder-row').style.display = 'none';
