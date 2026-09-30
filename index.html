@@ -88,7 +88,7 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
 <section id="sec-selection" class="section active">
 
   <div class="card">
-    <h2>2. Import des listes Massar</h2>
+    <h2>1. Import des listes Massar</h2>
     <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
       📄 Cliquez ici (ou glissez-déposez) un ou plusieurs fichiers Excel Massar (.xlsx) — une classe par fichier
     </div>
@@ -96,7 +96,7 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
   </div>
 
   <div class="card" id="sec-eleves" style="display:none;">
-    <h2>3. Sélection des participants</h2>
+    <h2>2. Sélection des participants</h2>
     <div id="classes-chips" style="margin-bottom:10px;"></div>
     <div class="row">
       <button onclick="cocherClasse()" class="secondary">Tout cocher (cette classe)</button>
@@ -119,13 +119,13 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
 <!-- ============ ONGLET PARTICIPANTS ============ -->
 <section id="sec-participants" class="section">
   <div class="card">
-    <h2>Vérification des participants</h2>
+    <h2>3. Vérification des participants</h2>
     <p style="font-size:.85em;color:#666;">Total des participants sélectionnés. Retirez ceux ajoutés par erreur.</p>
     <div class="row">
       <span id="part-summary" style="font-size:.9em;font-weight:600;"></span>
     </div>
     <div class="card" style="background:#f4f8ff;">
-      <h3 style="margin:0 0 6px;">☁️ Envoi de l'inscription</h3>
+      <h3 style="margin:0 0 6px;">4. ☁️ Envoi de l'inscription</h3>
       <p style="font-size:.85em;color:#555;margin:0 0 6px;">Envoie la liste au dossier Drive de la course et garde une sauvegarde dans votre propre Drive (rechargée automatiquement à la connexion).</p>
       <div class="row" id="drive-folder-row">
         <input id="drive-folder" type="text" placeholder="Lien ou ID du dossier Drive de la course" style="flex:1;min-width:240px;" onchange="saveDriveFolder()">
