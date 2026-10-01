@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SmartCross - Equipe v1.015 - Inscription des participants</title>
+<title>SmartCross - Equipe v1.016 - Inscription des participants</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -59,9 +59,64 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
 .dict-status { font-size:.78em; color:#a7f3d0; }
 .legend span { display:inline-block; padding:2px 10px; border-radius:6px; font-size:.8em; margin-right:6px; }
 @media (max-width:640px) { main { padding:14px; } header { padding:12px 14px; } nav { padding:6px 14px 0; } }
+/* ===== Barre de progression (entre header et onglets) ===== */
+#progress-bar {
+  position: relative;
+  height: 0;                       /* repliée par défaut : n'occupe aucun espace */
+  overflow: hidden;
+  background: #064e3b;             /* même vert foncé que la nav, pour la continuité visuelle */
+  display: flex; align-items: center; justify-content: center;
+  transition: height .3s ease;
+  z-index: 5;
+}
+#progress-bar.visible { height: 36px; }   /* déployée pendant l'opération */
+
+#progress-fill {
+  position: absolute; top: 0; left: 0;
+  height: 3px; width: 0%;
+  background: linear-gradient(90deg, #10b981, #1a2fec);
+  box-shadow: 0 0 6px rgba(16,185,129,.7);
+  transition: width .35s ease;
+}
+#progress-bar.indeterminate #progress-fill {
+  width: 30% !important;
+  transition: none;
+  animation: progress-slide 1.2s infinite ease-in-out;
+}
+@keyframes progress-slide {
+  0%   { margin-left: -30%; }
+  100% { margin-left: 100%; }
+}
+#progress-bar.error #progress-fill {
+  background: #dc2626;
+  box-shadow: 0 0 6px rgba(220,38,38,.7);
+}
+#progress-bar.done #progress-fill {
+  background: #1a2fec;
+  box-shadow: 0 0 6px rgba(26,47,236,.7);
+}
+#progress-bar.visible::before {
+  content:''; position:fixed; inset:0; background:rgba(15,23,42,.35);
+  backdrop-filter:blur(1px); pointer-events:auto;
+}
+
+#progress-label {
+  position: relative; z-index: 1;
+  color: #d1fae5;
+  font-size: .82em;
+  font-weight: 600;
+  letter-spacing: .2px;
+  padding: 0 12px;
+  white-space: nowrap;
+  text-align: center;
+  /* plus de position:fixed, plus de transition d'opacité : le libellé suit la barre */
+}
+
 </style>
 </head>
 <body>
+
+
 
 <header>
   <div>
@@ -76,6 +131,11 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
     <div class="dict-status" id="dict-status"></div>
   </div>
 </header>
+
+<div id="progress-bar" aria-hidden="true">
+  <div id="progress-fill"></div>
+  <div id="progress-label"></div>
+</div>
 
 <nav>
   <button class="tab active" data-tab="selection">📋 Sélection</button>
@@ -156,6 +216,52 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
 <div id="toast"></div>
 
 <script>
+
+/* ===================== BARRE DE PROGRESSION ===================== */
+const Progress = (() => {
+  const bar   = document.getElementById('progress-bar');
+  const fill  = document.getElementById('progress-fill');
+  const label = document.getElementById('progress-label');
+  let hideTimer = null;
+  const clearTimer = () => { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } };
+
+  function show(txt) {
+    clearTimer();
+    bar.classList.remove('error', 'done', 'indeterminate');
+    bar.classList.add('visible');
+    fill.style.width = '0%';
+    label.textContent = txt || '…';
+  }
+  function set(pct, txt) {
+    bar.classList.remove('indeterminate');
+    fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    if (txt !== undefined) label.textContent = txt;
+  }
+  function indeterminate(txt) {
+    bar.classList.add('indeterminate');
+    if (txt !== undefined) label.textContent = txt;
+  }
+  function done(txt, delay = 1200) {
+    bar.classList.remove('error', 'indeterminate');
+    bar.classList.add('done');
+    fill.style.width = '100%';
+    if (txt !== undefined) label.textContent = txt;
+    clearTimer(); hideTimer = setTimeout(hide, delay);
+  }
+  function error(txt, delay = 4000) {
+    bar.classList.remove('done', 'indeterminate');
+    bar.classList.add('error');
+    fill.style.width = '100%';
+    if (txt !== undefined) label.textContent = txt;
+    clearTimer(); hideTimer = setTimeout(hide, delay);
+  }
+  function hide() {
+    bar.classList.remove('visible');
+    setTimeout(() => { bar.classList.remove('done', 'error'); fill.style.width = '0%'; }, 300);
+  }
+  return { show, set, indeterminate, done, error, hide };
+})();
+
 /* ===================== DICTIONNAIRE PRENOMS -> SEXE (distant) ===================== */
 const GENDER_DICT_URL = 'https://gist.githubusercontent.com/TANK7070/4c7889720ab7942164a4527d864eb8ef/raw/';
 const GENDER_CACHE_KEY = 'crossCourseGenderDictCache';
@@ -481,8 +587,25 @@ async function afficherUtilisateur() {
   }
 }
 async function connexionGoogle() {
-  try { await driveAuth(); await chargerConfigDrive(); await restaurationAuto(); } catch (e) { driveStatus('❌ ' + e.message, false); }
+  try {
+    Progress.show('Connexion…');
+    Progress.indeterminate('🔐 Authentification Google…');
+    await driveAuth();
+
+    Progress.set(35, '⚙️ Récupération de la configuration…');
+    await chargerConfigDrive();
+
+    Progress.set(65, '☁️ Restauration de votre inscription…');
+    await restaurationAuto();
+
+    Progress.set(95, 'Finalisation…');
+    Progress.done('✅ Prêt');
+  } catch (e) {
+    driveStatus('❌ ' + e.message, false);
+    Progress.error('❌ ' + e.message.slice(0, 60));
+  }
 }
+
 function deconnexionGoogle() {
   if (!confirm('Se déconnecter ? La page va se recharger.')) return;
   try { if (driveToken && window.google && google.accounts) google.accounts.oauth2.revoke(driveToken, () => {}); } catch (e) {}
@@ -515,18 +638,36 @@ async function deposerSurDrive() {
   if (exclus > 0 && !confirm(`${exclus} élève(s) hors catégorie d'âge ne seront pas inclus. Continuer ?`)) return;
   const name = 'Equipe_' + (DB.etablissement || 'sans-nom').replace(/[^\p{L}\p{N}_-]+/gu, '_') + '.json';
   try {
+    Progress.show('Préparation…'); Progress.set(5, 'Préparation…');
     driveStatus('Connexion à Google…');
+    Progress.indeterminate('🔐 Authentification Google…');
     await driveAuth();
-    if (!restauree) await restaurationAuto(); // au cas où l'envoi précède le premier passage par "Se connecter"
+
+    if (!restauree) {
+      Progress.set(30, '☁️ Vérification de votre sauvegarde…');
+      await restaurationAuto();
+    }
+
+    Progress.set(55, '📤 Envoi au dossier de la course…');
     driveStatus('Envoi au dossier de la course…');
     await driveUpsert(name, folder, JSON.stringify(buildPayload(valides), null, 2));
+
+    Progress.set(80, '💾 Sauvegarde dans votre Drive…');
     driveStatus('Sauvegarde dans votre Drive…');
     try {
       await driveUpsert(BACKUP_NAME, 'root', JSON.stringify(DB));
       driveStatus(`✅ ${valides.length} participant(s) envoyé(s) le ${new Date().toLocaleString('fr-FR')} + sauvegarde dans votre Drive`, true);
-    } catch (e) { driveStatus(`⚠️ Liste envoyée (${name}) mais sauvegarde personnelle échouée : ${e.message}`, false); }
-  } catch (e) { driveStatus('❌ ' + e.message, false); }
+      Progress.done(`✅ Envoyé -${valides.length} participant(s)-`);
+    } catch (e) {
+      driveStatus(`⚠️ Liste envoyée (${name}) mais sauvegarde personnelle échouée : ${e.message}`, false);
+      Progress.error('⚠️ Envoyé, sauvegarde locale échouée');
+    }
+  } catch (e) {
+    driveStatus('❌ ' + e.message, false);
+    Progress.error('❌ ' + e.message.slice(0, 60));
+  }
 }
+
 let restauree = false;
 // Lecture de la configuration publiée par l'organisateur (année limite) dans le dossier partagé
 async function chargerConfigDrive() {
@@ -563,14 +704,25 @@ async function restaurationAuto() {
 }
 
 /* ===================== INITIALISATION ===================== */
-(function reprendreSession() {
+(async function reprendreSession() {
   try {
     const saved = JSON.parse(sessionStorage.getItem('sc_drive_token') || 'null');
     if (saved && saved.exp > Date.now()) {
       driveToken = saved.t;
-      afficherUtilisateur().then(() => chargerConfigDrive().then(restaurationAuto));
+      Progress.show('Reprise de session…');
+      Progress.indeterminate('🔐 Connexion au Drive…');
+      await afficherUtilisateur();
+
+      Progress.set(40, '⚙️ Récupération de la configuration…');
+      await chargerConfigDrive();
+
+      Progress.set(70, '☁️ Restauration de votre inscription…');
+      await restaurationAuto();
+
+      Progress.set(95, 'Finalisation…');
+      Progress.done('✅ Prêt');
     }
-  } catch (e) {}
+  } catch (e) { Progress.error('⚠️ ' + e.message.slice(0, 60)); }
 })();
 document.getElementById('drive-folder').value = localStorage.getItem('smartcross_drive_folder') || '';
 if (DRIVE_FOLDER_ID) document.getElementById('drive-folder-row').style.display = 'none';
