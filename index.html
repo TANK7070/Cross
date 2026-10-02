@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SmartCross - Equipe v1.016 - Inscription des participants</title>
+<title>SmartCross - Equipe v1.017 - Inscription des participants</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -537,6 +537,7 @@ function buildPayload(valides) {
 const GOOGLE_CLIENT_ID = '485145495491-t625ar1m4fgga69edeq0rtvdt7vcgbsn.apps.googleusercontent.com';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 let driveToken = null;
+let userEmail = '';
 
 // Dossier "DriveCross" de l'organisateur : coller ici son ID (ou son lien) pour masquer le champ de saisie
 const DRIVE_FOLDER_ID = '1BLphnNEO3SOoYMvtUD__Mrbtv_-NdhkS';
@@ -577,6 +578,7 @@ async function driveFetch(url, opts) {
 async function afficherUtilisateur() {
   try {
     const u = (await driveFetch('https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress)')).user;
+    userEmail = u.emailAddress || '';
     document.getElementById('google-user').textContent = '✅ ' + u.displayName + ' (' + u.emailAddress + ')';
     document.getElementById('btn-google').style.display = 'none';
     document.getElementById('btn-logout').style.display = '';
@@ -614,17 +616,33 @@ function deconnexionGoogle() {
   localStorage.removeItem(STORAGE_KEY);
   location.reload();
 }
+// Ne cherche que les fichiers DONT JE SUIS PROPRIÉTAIRE ('me' in owners) : avec le scope drive.file,
+// l'app ne peut modifier que ses propres fichiers ; un fichier du même nom créé par un autre compte
+// (collègue du même établissement) ne doit ni être modifié ni bloquer l'envoi.
 async function driveUpsert(name, parent, content) {
-  const q = encodeURIComponent(`name='${name}' and '${parent}' in parents and trashed=false`);
+  const q = encodeURIComponent(`name='${name}' and '${parent}' in parents and 'me' in owners and trashed=false`);
   const found = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
   if (found.files && found.files.length) {
-    return driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=media&supportsAllDrives=true`,
-      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content });
+    try {
+      return await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${found.files[0].id}?uploadType=media&supportsAllDrives=true`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content });
+    } catch (e) {
+      // repli de sécurité (droit refusé / fichier introuvable) : on crée un nouveau fichier
+      if (!/Drive (403|404)/.test(e.message)) throw e;
+    }
   }
   const b = 'sc' + Date.now();
   const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [parent], mimeType: 'application/json' })}\r\n--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${content}\r\n--${b}--`;
   return driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
     { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + b }, body });
+}
+// Met à la corbeille mes anciens fichiers au nom d'avant (Equipe_<établissement>.json) pour éviter les doublons
+async function driveTrashOwn(name, parent) {
+  const q = encodeURIComponent(`name='${name}' and '${parent}' in parents and 'me' in owners and trashed=false`);
+  const found = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+  for (const f of (found.files || []))
+    await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.id}?supportsAllDrives=true`,
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) });
 }
 const BACKUP_NAME = 'SmartCross_Equipe_sauvegarde.json';
 async function deposerSurDrive() {
@@ -636,12 +654,16 @@ async function deposerSurDrive() {
   const valides = sel.filter(e => getCategorieForAnnee(e.anneeNaissance));
   const exclus = sel.length - valides.length;
   if (exclus > 0 && !confirm(`${exclus} élève(s) hors catégorie d'âge ne seront pas inclus. Continuer ?`)) return;
-  const name = 'Equipe_' + (DB.etablissement || 'sans-nom').replace(/[^\p{L}\p{N}_-]+/gu, '_') + '.json';
+  const base = 'Equipe_' + (DB.etablissement || 'sans-nom').replace(/[^\p{L}\p{N}_-]+/gu, '_');
+  let name = base + '.json';
   try {
     Progress.show('Préparation…'); Progress.set(5, 'Préparation…');
     driveStatus('Connexion à Google…');
     Progress.indeterminate('🔐 Authentification Google…');
     await driveAuth();
+    if (!userEmail) await afficherUtilisateur();
+    // un fichier par professeur (deux collègues du même établissement ne s'écrasent plus)
+    if (userEmail) name = base + '_' + userEmail.replace(/[^\p{L}\p{N}-]+/gu, '_') + '.json';
 
     if (!restauree) {
       Progress.set(30, '☁️ Vérification de votre sauvegarde…');
@@ -651,6 +673,7 @@ async function deposerSurDrive() {
     Progress.set(55, '📤 Envoi au dossier de la course…');
     driveStatus('Envoi au dossier de la course…');
     await driveUpsert(name, folder, JSON.stringify(buildPayload(valides), null, 2));
+    if (name !== base + '.json') { try { await driveTrashOwn(base + '.json', folder); } catch (e) {} }
 
     Progress.set(80, '💾 Sauvegarde dans votre Drive…');
     driveStatus('Sauvegarde dans votre Drive…');
