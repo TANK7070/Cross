@@ -3,9 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SmartCross - Equipe v1.017 - Inscription des participants</title>
+<title>SmartCross - Equipe v1.022 - Inscription des participants</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="icon" href="https://taoufikeps.wordpress.com/wp-content/uploads/2026/10/smartcrossico.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 * { box-sizing: border-box; }
@@ -113,6 +112,106 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
   /* plus de position:fixed, plus de transition d'opacité : le libellé suit la barre */
 }
 
+/* ===== Lettres d'engagement ===== */
+.lettre-group-label {
+  font-size:.82em; font-weight:600; color:#065f46;
+  margin:18px 0 6px; padding:4px 10px;
+  background:#ecfdf5; border-left:4px solid #059669; border-radius:4px;
+}
+.lettre {
+  background:#fff; border:1px solid #d1d5db; border-radius:8px;
+  padding:26px 30px; margin-bottom:22px;
+  box-shadow:0 1px 3px rgba(0,0,0,.08);
+  font-size:.94em; direction:rtl; text-align:right;
+}
+.lettre-header { text-align:center; margin-bottom:16px; }
+.lettre-header .ar-title { font-size:1.45em; font-weight:700; }
+.lettre-header .annee { font-size:1em; margin-top:2px; }
+.lettre-header .sous-titre { font-size:1em; margin-top:6px; font-weight:600; }
+
+.lettre-info { margin:14px 0 16px; }
+.lettre-info .info-row {
+  display:flex; flex-wrap:wrap; gap:6px 30px;
+  margin-bottom:6px; font-size:.95em;
+}
+
+.lettre-table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+.lettre-table th, .lettre-table td {
+  border:1px solid #374151; padding:5px 8px;
+  font-size:.9em; text-align:right; vertical-align:middle;
+}
+.lettre-table th { background:#f3f4f6; font-weight:700; text-align:center; }
+.lettre-table td.col-num, .lettre-table th.col-num {
+  text-align:center; width:38px; font-weight:600;
+}
+.lettre-table td:nth-child(2) { min-width:170px; } /* Nom */
+.lettre-table td:nth-child(3) { width:90px; text-align:center; }
+.lettre-table td:nth-child(4) { width:100px; text-align:center; }
+.lettre-table td:nth-child(5) { width:100px; }     /* vide = à remplir */
+
+.lettre-note {
+  font-size:.82em; font-style:italic; color:#555;
+  margin:4px 0 14px; text-align:right;
+}
+.lettre-encadrant {
+  display:flex; flex-wrap:wrap; gap:8px 30px;
+  font-size:.94em; margin-bottom:22px;
+}
+
+.lettre-signature {
+  display:flex; justify-content:center; margin-top:22px;
+  font-size:.95em; line-height:1.7; text-align:center;
+}
+.lettre-signature > div { max-width:420px; }
+
+.lettre-badge {
+  display:inline-block; background:#065f46; color:#fff;
+  border-radius:10px; padding:1px 9px; font-size:.75em; margin-right:6px;
+  vertical-align:middle;
+}
+
+/* ===== Impression : uniquement les lettres, une par page ===== */
+@media print {
+  header, nav, #progress-bar, #toast, .no-print { display:none !important; }
+  main { padding:0 !important; max-width:none !important; }
+  .section { display:none !important; }
+  #sec-lettreEngagement { display:block !important; }
+  .lettre {
+    page-break-after:always; box-shadow:none;
+    border:none; padding:0; margin:0;
+  }
+  .lettre:last-child { page-break-after:auto; }
+  .lettre-group-label { display:none !important; }
+}
+
+/* ===== En-tête avec logos ===== */
+.lettre-header {
+  position:relative;
+  text-align:center;
+  margin-bottom:16px;
+  padding-top:6px;
+  min-height:96px;
+}
+.lettre-header .logo {
+  object-fit:contain;
+}
+.lettre-header .logo-ministere {
+  display:block;
+  margin:0 auto 8px;
+}
+.lettre-header .logo-aref {
+  position: absolute;
+  top: 25px;      /* Descend le logo de 15px vers le bas (augmenter si besoin) */
+  right: -25px;   /* Décale vers la droite (une valeur négative le pousse plus à droite) */
+  height: 90px;
+  width: 150px;
+}
+
+/* Impression : conserve les logos */
+@media print {
+  .lettre-header .logo { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}
+
 </style>
 </head>
 <body>
@@ -121,7 +220,7 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
 
 <header>
   <div>
-    <h1>🎽 SmartCross - Équipe</h1>
+    <h1>🎽 CrossCourse Équipe</h1>
     <div class="tagline">Import Massar · Sélection des participants</div>
   </div>
   <div style="text-align:right;">
@@ -141,6 +240,7 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
 <nav>
   <button class="tab active" data-tab="selection">📋 Sélection</button>
   <button class="tab" data-tab="participants">✅ Participants (<span id="tab-count">0</span>)</button>
+  <button class="tab" data-tab="lettreEngagement">📄 Lettre d'Engagement</button>
 </nav>
 
 <main>
@@ -211,6 +311,40 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
     </p>
     <button onclick="genererListeParticipants()">⬇️ Générer la liste (JSON)</button>
   </div>
+</section>
+<!-- ============ ONGLET LETTRE D'ENGAGEMENT ============ -->
+<section id="sec-lettreEngagement" class="section">
+
+  <div class="card no-print">
+    <h2>📄 Lettre d'Engagement — Paramètres</h2>
+    <p style="font-size:.85em;color:#666;">
+      Ces informations sont reportées sur chaque lettre.
+      Une lettre est générée <b>par sexe × catégorie d'âge × sous-catégorie</b>
+      (Élite / Sport pour tous), avec <b>10 élèves maximum par lettre</b>
+      (pagination automatique au-delà).
+    </p>
+    <div id="lt-org-note" style="font-size:.85em;color:#065f46;margin-bottom:6px;"></div>
+    <div class="row">
+      <input id="lt-circ" type="text" placeholder="المقاطعة التربوية — Circonscription"
+             style="flex:1;min-width:180px;" oninput="updateLettre('circonscription', this.value)">
+    </div>
+    <div class="row">
+      <input id="lt-prof" type="text" placeholder="Nom de l'encadrant(e) — المؤطر(ة)"
+             style="flex:1;min-width:180px;" oninput="updateLettre('nomProf', this.value)">
+      <input id="lt-doti" type="text" placeholder="N° d'employé — رقم التأجير"
+             style="flex:1;min-width:140px;" oninput="updateLettre('doti', this.value)">
+      <input id="lt-tel" type="text" placeholder="Téléphone — رقم الهاتف"
+             style="flex:1;min-width:140px;" oninput="updateLettre('tel', this.value)">
+    </div>
+    
+    <div class="row">
+      <button onclick="renderLettres()">🔄 Regénérer</button>
+      <button onclick="window.print()" class="secondary">🖨️ Imprimer / PDF</button>
+      <span id="lt-count" style="font-size:.85em;color:#555;"></span>
+    </div>
+  </div>
+
+  <div id="lettres-container"></div>
 </section>
 
 </main>
@@ -316,7 +450,7 @@ const STORAGE_KEY = 'crossCourseEquipeDB_v2';
 localStorage.removeItem(STORAGE_KEY); // app vierge à chaque ouverture ; les données d'une session en cours sont restaurées depuis le Drive du prof après connexion
 function loadDB() {
   try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) return JSON.parse(raw); } catch (e) { console.error(e); }
-  return { anneeLimite: null, etablissement: '', classeActive: null, classes: [] };
+  return { anneeLimite: null, etablissement: '', classeActive: null, classes: [], lettre: {} };
   // classes: { id, nom, eleves: [{ codeMassar, nomComplet, dateNaissanceRaw, anneeNaissance, sexe, sexeManuel, selected, elite }] }
 }
 let DB = loadDB();
@@ -445,6 +579,181 @@ function badgeCat(e) {
   return cat ? `<span class="badge ok">${escapeHtml(cat.nom)}</span>` : '<span class="badge excl">Exclu</span>';
 }
 
+/* ===================== LETTRES D'ENGAGEMENT ===================== */
+// Année scolaire déduite d'une date de course (septembre → août), si l'organisateur n'a pas publié le champ
+function anneeScolaireFromDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d)) return '';
+  const y = d.getFullYear(), m = d.getMonth();
+  return m >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+}
+// Titre de la course et année scolaire : fournis uniquement par l'organisateur (config.json), plus de saisie côté prof
+const LETTRE_ORG_FIELDS = ['courseTitreAr', 'anneeScolaire'];
+function lettreValeurs() {
+  const L = Object.assign({}, DB.lettre || {});
+  const O = DB.lettreOrg || {};
+  LETTRE_ORG_FIELDS.forEach(k => { L[k] = O[k] || ''; });
+  return L;
+}
+const LETTRE_FIELDS = {
+  'lt-circ': 'circonscription',
+  'lt-prof': 'nomProf', 'lt-doti': 'doti', 'lt-tel': 'tel'
+};
+
+function updateLettre(field, value) {
+  DB.lettre = DB.lettre || {};
+  DB.lettre[field] = value;
+  saveDB();
+  // Mise à jour ciblée dans les lettres déjà rendues (sans re-render, pour ne pas perdre le focus)
+  document.querySelectorAll(`[data-lettre-field="${field}"]`).forEach(el => {
+    el.textContent = value || '—';
+  });
+}
+
+// Regroupe par (sexe × catégorie × sous-catégorie), puis découpe en paquets de 10.
+function buildLettres() {
+  const sel = allEleves().filter(e => e.selected && getCategorieForAnnee(e.anneeNaissance));
+  const groups = {};
+  for (const e of sel) {
+    const cat = getCategorieForAnnee(e.anneeNaissance);
+    const sexe = e.sexe || '?';
+    const sousCat = e.elite ? 'Elite' : 'Sport pour tous';
+    const key = `${sexe}|${cat.id}|${sousCat}`;
+    if (!groups[key]) groups[key] = { sexe, categorie: cat, sousCategorie: sousCat, eleves: [] };
+    groups[key].eleves.push(e);
+  }
+  const lettres = [];
+  for (const k in groups) {
+    const g = groups[k];
+    const chunks = Math.ceil(g.eleves.length / 10);
+    for (let i = 0; i < chunks; i++) {
+      lettres.push({
+        sexe: g.sexe, categorie: g.categorie, sousCategorie: g.sousCategorie,
+        eleves: g.eleves.slice(i * 10, (i + 1) * 10),
+        page: i + 1, totalPages: chunks
+      });
+    }
+  }
+  lettres.sort((a, b) => {
+    if (a.sexe !== b.sexe) return a.sexe.localeCompare(b.sexe);
+    if (a.categorie.id !== b.categorie.id) return a.categorie.id.localeCompare(b.categorie.id);
+    return a.sousCategorie.localeCompare(b.sousCategorie);
+  });
+  return lettres;
+}
+
+/* ===================== LOGOS D'EN-TÊTE (URLs fixes) ===================== */
+const LOGO_MINISTERE_URL = 'https://taoufikeps.wordpress.com/wp-content/uploads/2026/10/logo-ministere-2.png';
+const LOGO_AREF_URL      = 'https://taoufikeps.wordpress.com/wp-content/uploads/2026/10/logo-frmss.png';
+
+function renderLettres() {
+  const container = document.getElementById('lettres-container');
+  const countEl = document.getElementById('lt-count');
+  if (!container) return;
+
+  DB.lettre = DB.lettre || {};
+  const L = lettreValeurs();
+
+  // Synchronise les champs de saisie (sans écraser la saisie en cours)
+  for (const [id, field] of Object.entries(LETTRE_FIELDS)) {
+    const el = document.getElementById(id);
+    if (el && document.activeElement !== el) el.value = L[field] || '';
+  }
+  const orgOk = LETTRE_ORG_FIELDS.every(k => !!L[k]);
+  const orgNote = document.getElementById('lt-org-note');
+  if (orgNote) {
+    orgNote.style.color = orgOk ? '#065f46' : '#b45309';
+    orgNote.textContent = orgOk
+      ? `📥 Fourni par l'organisateur : ${L.courseTitreAr} — ${L.anneeScolaire}`
+      : "⚠️ Titre de la course et année scolaire : non publiés par l'organisateur (connectez-vous avec Google pour les récupérer).";
+  }
+
+  if (!DB.anneeLimite) {
+    container.innerHTML = '<div class="card"><div class="warn-banner">⚠️ Année limite non définie : connectez-vous avec Google pour la récupérer.</div></div>';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  const lettres = buildLettres();
+  if (countEl) countEl.textContent = lettres.length
+    ? `${lettres.length} lettre(s) — ${lettres.reduce((n, l) => n + l.eleves.length, 0)} élève(s)`
+    : 'Aucune lettre à générer';
+
+  if (!lettres.length) {
+    container.innerHTML = '<div class="card"><p style="color:#666;">Aucun participant sélectionné (et valide au regard de l\'année limite) pour générer des lettres.</p></div>';
+    return;
+  }
+
+  const etab = DB.etablissement || '—';
+
+  container.innerHTML = lettres.map((l, idx) => {
+    const sexeLabel = l.sexe === 'G' ? 'ذكور' : (l.sexe === 'F' ? 'إناث' : '—');
+    const rows = [];
+    for (let i = 0; i < 10; i++) {
+      const e = l.eleves[i];
+      rows.push(`<tr>
+        <td class="col-num">${i + 1}</td>
+        <td>${e ? escapeHtml(e.nomComplet) : ''}</td>
+        <td>${e ? escapeHtml(e.dateNaissanceRaw || '') : ''}</td>
+        <td>${e ? escapeHtml(e.codeMassar) : ''}</td>
+        <td></td>
+      </tr>`);
+    }
+    const pageBadge = l.totalPages > 1 ? ` <span class="lettre-badge">${l.page}/${l.totalPages}</span>` : '';
+    const groupLabel = `Lettre ${idx + 1} — ${l.sexe === 'G' ? 'Garçons' : l.sexe === 'F' ? 'Filles' : 'Sexe ?'} — ${l.categorie.nom} — ${l.sousCategorie}`;
+
+    return `
+      <div class="lettre-group-label no-print">${escapeHtml(groupLabel)}${pageBadge}</div>
+      <div class="lettre" lang="ar">
+        <div class="lettre-header">
+          <img class="logo logo-aref" src="${LOGO_AREF_URL}" alt="AREF">
+          <img class="logo logo-ministere" src="${LOGO_MINISTERE_URL}" alt="Ministère" style="width: 500px; height: auto;">
+          <div class="ar-title" data-lettre-field="courseTitreAr">${escapeHtml(L.courseTitreAr || '—')}</div>
+          <div class="annee" data-lettre-field="anneeScolaire">${escapeHtml(L.anneeScolaire || '')}</div>
+          <div class="sous-titre">مطبوع المشاركة</div>
+        </div>
+        <div class="lettre-info">
+          <div class="info-row">
+            <span><b>المؤسسة التعليمية:</b> ${escapeHtml(etab)}</span>
+            <span><b>المقاطعة التربوية:</b> <span data-lettre-field="circonscription">${escapeHtml(L.circonscription || '—')}</span></span>
+          </div>
+          <div class="info-row">
+            <span><b>البطولة:</b> العدو الريفي</span>
+            <span><b>الفئة العمرية:</b> ${escapeHtml(l.categorie.nom)}</span>
+            <span><b>النوع:</b> ${sexeLabel}</span>
+            <span><b>الصنف:</b> ${l.sousCategorie === 'Elite' ? 'نخبة' : 'رياضة للجميع'}</span>
+          </div>
+        </div>
+        <table class="lettre-table">
+          <thead>
+            <tr>
+              <th class="col-num">رت</th>
+              <th>الاسم الكامل للتلميذ (ة)</th>
+              <th>تاريخ الازدياد</th>
+              <th>رقم مسار</th>
+              <th>رقم التأمين</th>
+            </tr>
+          </thead>
+          <tbody>${rows.join('')}</tbody>
+        </table>
+        <div class="lettre-note">ملحوظة : يخصص مطبوع لكل فئة عمرية ولكل نوع</div>
+        <div class="lettre-encadrant">
+          <div><b>المؤطر(ة):</b> <span data-lettre-field="nomProf">${escapeHtml(L.nomProf || '—')}</span></div>
+          <div><b>رقم التأجير:</b> <span data-lettre-field="doti">${escapeHtml(L.doti || '—')}</span></div>
+          <div><b>رقم الهاتف:</b> <span data-lettre-field="tel">${escapeHtml(L.tel || '—')}</span></div>
+        </div>
+        <div class="lettre-signature">
+          <div>
+            <b>البطولة الاقليمية</b><br>
+            اسم وتوقيع وخاتم مدير(ة) المؤسسة،<br>
+            رئيس(ة) الجمعية الرياضية المدرسية
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
 function renderAll() {
   document.getElementById('etab-display').textContent = DB.etablissement || '';
   const has = DB.classes.length > 0;
@@ -485,6 +794,7 @@ function renderAll() {
   else warnEl.innerHTML = '';
 
   renderParticipants(sel, exclus);
+  renderLettres();
 }
 
 function renderParticipants(sel, exclus) {
@@ -705,6 +1015,12 @@ async function chargerConfigDrive() {
     const cfg = await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.files[0].id}?alt=media`);
     if (cfg && cfg.anneeLimite) {
       DB.anneeLimite = cfg.anneeLimite;
+      // Champs de la lettre d'engagement fournis par l'organisateur (prioritaires sur la saisie du prof)
+      const c = cfg.course || {};
+      DB.lettreOrg = {
+        courseTitreAr: String(c.titreAr || '').trim(),
+        anneeScolaire: String(cfg.anneeScolaire || anneeScolaireFromDate(c.date) || '').trim()
+      };
       saveDB();
       renderAll();
     }
