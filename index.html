@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SmartCross - Equipe v1.022 - Inscription des participants</title>
+<title>SmartCross - Equipe v1.023 - Inscription des participants</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -454,6 +454,7 @@ function loadDB() {
   // classes: { id, nom, eleves: [{ codeMassar, nomComplet, dateNaissanceRaw, anneeNaissance, sexe, sexeManuel, selected, elite }] }
 }
 let DB = loadDB();
+let configOrg = null; // config publiée par l'organisateur (déclarée tôt : lue par renderLettres)
 function saveDB() { DB.majLe = Date.now(); localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }
 function uid() { return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function showToast(msg) {
@@ -660,13 +661,17 @@ function renderLettres() {
     const el = document.getElementById(id);
     if (el && document.activeElement !== el) el.value = L[field] || '';
   }
-  const orgOk = LETTRE_ORG_FIELDS.every(k => !!L[k]);
+  const manquants = [];
+  if (!L.courseTitreAr) manquants.push('titre de la course');
+  if (!L.anneeScolaire) manquants.push('année scolaire (date de la course à renseigner côté organisateur)');
   const orgNote = document.getElementById('lt-org-note');
   if (orgNote) {
-    orgNote.style.color = orgOk ? '#065f46' : '#b45309';
-    orgNote.textContent = orgOk
+    orgNote.style.color = manquants.length ? '#b45309' : '#065f46';
+    orgNote.textContent = !manquants.length
       ? `📥 Fourni par l'organisateur : ${L.courseTitreAr} — ${L.anneeScolaire}`
-      : "⚠️ Titre de la course et année scolaire : non publiés par l'organisateur (connectez-vous avec Google pour les récupérer).";
+      : !configOrg
+        ? "⚠️ Configuration de l'organisateur non récupérée (connectez-vous avec Google)."
+        : `⚠️ Non publié par l'organisateur : ${manquants.join(', ')}.`;
   }
 
   if (!DB.anneeLimite) {
@@ -1004,6 +1009,12 @@ async function deposerSurDrive() {
 
 let restauree = false;
 // Lecture de la configuration publiée par l'organisateur (année limite) dans le dossier partagé
+// Config publiée par l'organisateur, gardée à part : la restauration de la sauvegarde du prof remplace tout DB et l'écraserait
+function appliquerConfigOrg() {
+  if (!configOrg) return;
+  DB.anneeLimite = configOrg.anneeLimite;
+  DB.lettreOrg = configOrg.lettreOrg;
+}
 async function chargerConfigDrive() {
   try {
     const q = encodeURIComponent(`name='config.json' and '${getFolderId()}' in parents and trashed=false`);
@@ -1014,13 +1025,16 @@ async function chargerConfigDrive() {
     }
     const cfg = await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.files[0].id}?alt=media`);
     if (cfg && cfg.anneeLimite) {
-      DB.anneeLimite = cfg.anneeLimite;
-      // Champs de la lettre d'engagement fournis par l'organisateur (prioritaires sur la saisie du prof)
+      // Champs de la lettre d'engagement fournis par l'organisateur
       const c = cfg.course || {};
-      DB.lettreOrg = {
-        courseTitreAr: String(c.titreAr || '').trim(),
-        anneeScolaire: String(cfg.anneeScolaire || anneeScolaireFromDate(c.date) || '').trim()
+      configOrg = {
+        anneeLimite: cfg.anneeLimite,
+        lettreOrg: {
+          courseTitreAr: String(c.titreAr || '').trim(),
+          anneeScolaire: String(cfg.anneeScolaire || anneeScolaireFromDate(c.date) || '').trim()
+        }
       };
+      appliquerConfigOrg();
       saveDB();
       renderAll();
     }
@@ -1034,7 +1048,7 @@ async function restaurationAuto() {
     if (f.files && f.files.length) {
       const data = await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.files[0].id}?alt=media`);
       if (data && Array.isArray(data.classes) && (!DB.classes.length || (data.majLe || 0) > (DB.majLe || 0))) {
-        DB = data; localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
+        DB = data; appliquerConfigOrg(); localStorage.setItem(STORAGE_KEY, JSON.stringify(DB));
         renderAll();
         driveStatus('✅ Votre inscription a été restaurée depuis votre Drive : vous pouvez la modifier puis la renvoyer.', true);
       }
