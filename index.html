@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SmartCross - Equipe v1.023 - Inscription des participants</title>
+<title>SmartCross - Equipe v1.024 - Inscription des participants</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -212,11 +212,82 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
   .lettre-header .logo { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 }
 
+/* ===== Écran d'accueil / connexion ===== */
+.welcome-screen {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, #065f46 0%, #064e3b 100%);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px;
+  transition: opacity .3s ease;
+}
+.welcome-screen.hidden { opacity: 0; pointer-events: none; }
+
+.welcome-card {
+  background: #fff; border-radius: 16px;
+  padding: 40px 44px; max-width: 560px; width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  text-align: center;
+}
+.welcome-card h1 { font-size: 2em; color: #065f46; margin: 0 0 6px; }
+.welcome-tagline { color: #6b7280; font-size: .95em; margin: 0 0 26px; }
+
+.welcome-steps {
+  text-align: left; background: #f9fafb; border: 1px solid #e5e7eb;
+  border-radius: 10px; padding: 14px 20px; margin-bottom: 22px;
+}
+.welcome-steps .step {
+  font-size: .92em; color: #374151; padding: 6px 0;
+  border-bottom: 1px dashed #e5e7eb;
+}
+.welcome-steps .step:last-child { border-bottom: none; }
+
+.welcome-btn {
+  background: #059669; color: #fff; font-size: 1.05em;
+  padding: 14px 28px; border-radius: 10px; width: 100%;
+  font-weight: 600; border: none;
+}
+.welcome-btn:hover:not(:disabled) { background: #047857; }
+.welcome-btn:disabled { background: #9ca3af; cursor: wait; }
+
+.welcome-note {
+  font-size: .82em; color: #92400e; background: #fef3c7;
+  border: 1px solid #fcd34d; border-radius: 8px;
+  padding: 10px 12px; margin-top: 18px; text-align: left; line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .welcome-card { padding: 28px 22px; }
+  .welcome-card h1 { font-size: 1.5em; }
+}
+
 </style>
 </head>
 <body>
 
+<!-- ===== Écran d'accueil / connexion obligatoire ===== -->
+<div id="welcome-screen" class="welcome-screen">
+  <div class="welcome-card">
+    <h1>🎽 SmartCross Équipe</h1>
+    <p class="welcome-tagline">Import Massar · Sélection des participants · Lettres d'engagement</p>
 
+    <div class="welcome-steps">
+      <div class="step">1️⃣ Connectez-vous avec votre compte Google</div>
+      <div class="step">2️⃣ Importez les listes Massar (.xlsx)</div>
+      <div class="step">3️⃣ Sélectionnez les participants</div>
+      <div class="step">4️⃣ Envoyez les participants</div>
+      <div class="step">5️⃣ Générez et imprimez les lettres d'engagement</div>
+    </div>
+
+    <button id="btn-welcome-google" class="welcome-btn" onclick="connexionGoogleDepuisAccueil()">
+      🔐 Se connecter avec Google
+    </button>
+
+    <p class="welcome-note">
+      ⚠️ La connexion Google est <b>obligatoire</b> : elle charge la configuration de la course
+      (année limite) et enregistre votre inscription dans le Drive partagé.
+    </p>
+  </div>
+</div>
 
 <header>
   <div>
@@ -457,10 +528,23 @@ let DB = loadDB();
 let configOrg = null; // config publiée par l'organisateur (déclarée tôt : lue par renderLettres)
 function saveDB() { DB.majLe = Date.now(); localStorage.setItem(STORAGE_KEY, JSON.stringify(DB)); }
 function uid() { return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
 function showToast(msg) {
   const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2400);
 }
+
+function showWelcome() {
+  const ws = document.getElementById('welcome-screen');
+  if (ws) { ws.style.display = 'flex'; ws.classList.remove('hidden'); }
+}
+function hideWelcome() {
+  const ws = document.getElementById('welcome-screen');
+  if (!ws) return;
+  ws.classList.add('hidden');
+  setTimeout(() => { ws.style.display = 'none'; }, 320);
+}
+
 function escapeHtml(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function allEleves() { return DB.classes.flatMap(c => c.eleves.map(e => ({ ...e, classeId: c.id, classeNom: c.nom }))); }
 function findEleve(code) { for (const c of DB.classes) { const e = c.eleves.find(x => x.codeMassar === code); if (e) return e; } return null; }
@@ -904,6 +988,7 @@ async function afficherUtilisateur() {
     document.getElementById('btn-logout').style.display = '';
   }
 }
+
 async function connexionGoogle() {
   try {
     Progress.show('Connexion…');
@@ -918,9 +1003,22 @@ async function connexionGoogle() {
 
     Progress.set(95, 'Finalisation…');
     Progress.done('✅ Prêt');
+    return true;
   } catch (e) {
     driveStatus('❌ ' + e.message, false);
     Progress.error('❌ ' + e.message.slice(0, 60));
+    return false;
+  }
+}
+
+async function connexionGoogleDepuisAccueil() {
+  const btn = document.getElementById('btn-welcome-google');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Connexion en cours…'; }
+  try {
+    const ok = await connexionGoogle();
+    if (ok) hideWelcome();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔐 Se connecter avec Google'; }
   }
 }
 
@@ -1075,9 +1173,16 @@ async function restaurationAuto() {
 
       Progress.set(95, 'Finalisation…');
       Progress.done('✅ Prêt');
+
+      hideWelcome();                 // ← session valide : on masque l'accueil
     }
-  } catch (e) { Progress.error('⚠️ ' + e.message.slice(0, 60)); }
+    // Sinon : l'écran d'accueil reste affiché, l'utilisateur doit cliquer sur le bouton Google.
+  } catch (e) {
+    Progress.error('⚠️ ' + e.message.slice(0, 60));
+    showWelcome();                   // en cas d'échec, on reste sur l'accueil
+  }
 })();
+
 document.getElementById('drive-folder').value = localStorage.getItem('smartcross_drive_folder') || '';
 if (DRIVE_FOLDER_ID) document.getElementById('drive-folder-row').style.display = 'none';
 renderAll();
