@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SmartCross - Equipe v1.024 - Inscription des participants</title>
+<title>SmartCross - Equipe v1.028 - Inscription des participants</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
@@ -283,7 +283,8 @@ tr.row-selected td:first-child { box-shadow: inset 4px 0 0 #007888; } /* liseré
     </button>
 
     <p class="welcome-note">
-      ⚠️ La connexion Google est <b>obligatoire</b> pour pouvoir inscrire vos élèves participants.
+      ⚠️ La connexion Google est <b>obligatoire</b> : elle charge la configuration de la course
+      (année limite) et enregistre votre inscription dans le Drive partagé.
     </p>
   </div>
 </div>
@@ -934,7 +935,12 @@ function buildPayload(valides) {
 /* ===================== DRIVE CENTRALISÉ ===================== */
 // À renseigner : ID client OAuth (type "Application Web") du projet Google Cloud dédié
 const GOOGLE_CLIENT_ID = '485145495491-t625ar1m4fgga69edeq0rtvdt7vcgbsn.apps.googleusercontent.com';
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
+// Un seul scope, NON SENSIBLE : aucune vérification Google requise, donc pas d'écran « application non validée »
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+// Configuration publiée par l'organisateur : fichier config.json partagé en « Tous les utilisateurs disposant du lien : lecteur »
+// (il ne contient que l'année limite, le titre de la course et l'année scolaire). Lecture sans connexion, via une clé API.
+const CONFIG_FILE_ID = '1BAC8y7g_1UbADbRyzhRpKEbCR9fMbG90';      // ID du fichier config.json (à coller ici)
+const GOOGLE_API_KEY = 'AIzaSyC7-aXGHgHvjmBhm4CykioeHoH8gREDbJw';      // Clé API (restreinte à l'API Drive et à l'adresse web de l'app)
 let driveToken = null;
 let userEmail = '';
 
@@ -1114,13 +1120,17 @@ function appliquerConfigOrg() {
 }
 async function chargerConfigDrive() {
   try {
-    const q = encodeURIComponent(`name='config.json' and '${getFolderId()}' in parents and trashed=false`);
-    const f = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`);
-    if (!f.files || !f.files.length) {
-      driveStatus("⚠️ L'organisateur n'a pas encore publié l'année limite.", false);
+    if (!CONFIG_FILE_ID || !GOOGLE_API_KEY) {
+      driveStatus("⚠️ Lien vers la configuration de la course non renseigné dans l'application.", false);
       return;
     }
-    const cfg = await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.files[0].id}?alt=media`);
+    const rc = await fetch(`https://www.googleapis.com/drive/v3/files/${CONFIG_FILE_ID}?alt=media&supportsAllDrives=true&key=${GOOGLE_API_KEY}&_=${Date.now()}`);
+    if (rc.status === 404 || rc.status === 403) {
+      driveStatus("⚠️ L'organisateur n'a pas encore publié (ou partagé) la configuration de la course.", false);
+      return;
+    }
+    if (!rc.ok) throw new Error('HTTP ' + rc.status);
+    const cfg = await rc.json();
     if (cfg && cfg.anneeLimite) {
       // Champs de la lettre d'engagement fournis par l'organisateur
       const c = cfg.course || {};
